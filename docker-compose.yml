@@ -42,16 +42,43 @@ services:
 
 
 ######################################################################################
+#####################            VECTOR NODE                   #######################
+######################################################################################
+
+  vector-node:
+    image: connextproject/vector_node:0.2.1-beta.20
+    container_name: vector-node
+    depends_on:
+      - postgres2
+    environment:
+      VECTOR_PROD: "true"
+      VECTOR_MNEMONIC: ${OPERATOR_SEED_PHRASE}
+      VECTOR_PG_HOST: postgres2
+      VECTOR_PG_PORT: 5432
+      VECTOR_PG_USERNAME: ${DB_USER:-graph-node}
+      VECTOR_PG_PASSWORD: ${DB_PASS:-db-password}
+      VECTOR_PG_DATABASE: vector
+      VECTOR_CONFIG: $JSON_STRING
+    expose:
+      - 8000
+      - 8001
+    networks:
+      - monitor-net
+    restart: unless-stopped
+    logging: *default-logging
+
+######################################################################################
 #####################         INDEXER SERVICE CONTAINER        #######################
 ######################################################################################
 
   indexer-service:
-    image: ghcr.io/graphprotocol/indexer-service:v0.10.0
+    image: ghcr.io/graphprotocol/indexer-service:v0.11.0
     container_name: indexer-service
     depends_on:
       - index-node
       - query-node
       - indexer-agent
+      - vector-node
     environment:
       INDEXER_SERVICE_MNEMONIC: ${OPERATOR_SEED_PHRASE}
       INDEXER_SERVICE_INDEXER_ADDRESS: ${STAKING_WALLET_ADDRESS}
@@ -66,6 +93,8 @@ services:
       INDEXER_SERVICE_POSTGRES_PASSWORD: ${DB_PASS:-db-password}
       INDEXER_SERVICE_POSTGRES_DATABASE: ${AGENT_DB_NAME:-indexer-agent}
       INDEXER_SERVICE_WALLET_WORKER_THREADS: ${WORKER_THREADS_PER_INDEXER_SERVICE:-8}
+      INDEXER_SERVICE_VECTOR_NODE: "http://vector-node:8000"
+      INDEXER_SERVICE_VECTOR_ROUTER: "vector8BSZxfkr62As6KZX2so4yXuex5XcpPXQ2tYZrBqpub94dAobu7"
       SKIP_EVM_VALIDATION: "true"
       SERVER_HOST: ${AGENT_DB_HOST:-postgres2}
       SERVER_PORT: 5432
@@ -89,11 +118,12 @@ services:
 ######################################################################################
 
   indexer-agent:
-    image: ghcr.io/graphprotocol/indexer-agent:v0.10.0
+    image: ghcr.io/graphprotocol/indexer-agent:v0.11.0
     container_name: indexer-agent
     depends_on:
       - index-node
       - query-node
+      - vector-node
     expose:
       - 8000
       - 7300
@@ -114,6 +144,10 @@ services:
       INDEXER_AGENT_POSTGRES_USERNAME: ${DB_USER:-graph-node}
       INDEXER_AGENT_POSTGRES_PASSWORD: ${DB_PASS:-db-password}
       INDEXER_AGENT_POSTGRES_DATABASE: ${AGENT_DB_NAME:-indexer-agent}
+      INDEXER_AGENT_DAI_CONTRACT: "0x9e7e607afd22906f7da6f1ec8f432d6f244278be"
+      INDEXER_AGENT_VECTOR_NODE: "http://vector-node:8000"
+      INDEXER_AGENT_VECTOR_EVENT_SERVER: "http://vector-node"
+      INDEXER_AGENT_VECTOR_ROUTER: "vector8BSZxfkr62As6KZX2so4yXuex5XcpPXQ2tYZrBqpub94dAobu7"
     networks:
       - monitor-net
     restart: unless-stopped
